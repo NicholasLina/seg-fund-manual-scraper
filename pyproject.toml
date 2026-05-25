@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ia-funds-metastock"
+version = "0.1.0"
+description = "Convert iA segregated-fund performance CSVs to MetaStock ASCII, Excel, and email reports; optional live fetch from ia.ca."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+  "pandas>=2.0",
+  "openpyxl>=3.1",
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+ia-funds = "ia_funds.cli:main"
+
+[tool.hatch.build]
+sources = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ia_funds"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
