@@ -1,0 +1,1 @@
+# seg-fund-manual-scraper
