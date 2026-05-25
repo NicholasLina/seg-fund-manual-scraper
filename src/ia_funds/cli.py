@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 from ia_funds.excel_export import export_workbook
 from ia_funds.loader import load_wide_csv, wide_to_long
 from ia_funds.metastock import export_per_ticker_files, wide_csv_to_metastock
 from ia_funds.report_email import send_report_smtp
-from ia_funds.scraper import fetch_yield_snapshot, merge_nav_into_wide
+from ia_funds.scraper import fetch_yield_history, fetch_yield_snapshot, merge_nav_into_wide
 
 
 def cmd_metastock(args: argparse.Namespace) -> int:
@@ -38,9 +37,34 @@ def cmd_email(args: argparse.Namespace) -> int:
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
-    snap = fetch_yield_snapshot(args.date, fund_type=args.fund_type, locale=args.locale)
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.from_date and args.to_date:
+        wide, long_df = fetch_yield_history(
+            args.from_date,
+            args.to_date,
+            fund_type=args.fund_type,
+            locale=args.locale,
+            sleep_seconds=args.sleep,
+            weekdays_only=args.weekdays_only,
+            fail_fast=args.fail_fast,
+        )
+        wide.to_csv(out, index=False)
+        date_cols = [c for c in wide.columns if c not in ("Funds", "Asset class", "Code")]
+        print(f"Wrote {out} ({len(wide)} funds, {len(date_cols)} date columns)")
+        if args.long_output:
+            lp = Path(args.long_output)
+            lp.parent.mkdir(parents=True, exist_ok=True)
+            long_df.to_csv(lp, index=False)
+            print(f"Wrote long format: {lp} ({len(long_df)} rows)")
+        return 0
+
+    if args.from_date or args.to_date:
+        print("error: both --from-date and --to-date are required for history mode", flush=True)
+        return 2
+
+    snap = fetch_yield_snapshot(args.date, fund_type=args.fund_type, locale=args.locale)
     snap.to_csv(out, index=False)
     print(f"Wrote {out} ({len(snap)} rows)")
     if args.merge_wide:
@@ -75,13 +99,47 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--mail-to", dest="mail_to", default=None)
     pr.set_defaults(func=cmd_email)
 
-    pf = sub.add_parser("fetch", help="Fetch snapshot from ia.ca API")
-    pf.add_argument("--date", required=True, help="As-of date (YYYY-MM-DD)")
+    pf = sub.add_parser("fetch", help="Fetch snapshot or day-by-day history from ia.ca API")
+    pf.add_argument(
+        "--date",
+        default=None,
+        help="Single as-of date (YYYY-MM-DD). Ignored when --from-date and --to-date are set.",
+    )
+    pf.add_argument(
+        "--from-date",
+        dest="from_date",
+        default=None,
+        help="Start date for history rebuild (requires --to-date). One API request per day.",
+    )
+    pf.add_argument(
+        "--to-date",
+        dest="to_date",
+        default=None,
+        help="End date for history rebuild (inclusive).",
+    )
     pf.add_argument("--fund-type", choices=("savings", "insurance"), default="savings")
     pf.add_argument("--locale", default="en-ca")
-    pf.add_argument("--output", required=True, help="Snapshot CSV path")
-    pf.add_argument("--merge-wide", dest="merge_wide", default=None, help="Existing wide NAV CSV to append column onto")
-    pf.add_argument("--merge-out", dest="merge_out", default=None, help="Output for merged wide (default: overwrite --merge-wide)")
+    pf.add_argument("--output", required=True, help="Output CSV (snapshot or wide history)")
+    pf.add_argument(
+        "--long-output",
+        dest="long_output",
+        default=None,
+        help="With history mode: also write melted long CSV to this path",
+    )
+    pf.add_argument(
+        "--sleep",
+        type=float,
+        default=0.25,
+        help="Seconds to sleep between history requests (default: 0.25)",
+    )
+    pf.add_argument(
+        "--weekdays-only",
+        action="store_true",
+        help="Only request Mon–Fri (still one call per weekday)",
+    )
+    pf.add_argument("--fail-fast", action="store_true", help="Abort on first HTTP/network error")
+    pf.add_argument("--merge-wide", dest="merge_wide", default=None, help="(single-day mode) wide CSV to merge into")
+    pf.add_argument("--merge-out", dest="merge_out", default=None, help="(single-day mode) merged wide output path")
     pf.set_defaults(func=cmd_fetch)
 
     return p
@@ -90,6 +148,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.cmd == "fetch" and not args.from_date and not args.to_date and not args.date:
+        parser.error("fetch requires either --date (single day) or both --from-date and --to-date (history)")
     raise SystemExit(args.func(args))
 
 

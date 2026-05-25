@@ -5,7 +5,7 @@ Python toolkit inspired by manual segregated-fund workflows (similar in spirit t
 - **MetaStock DownLoader–friendly ASCII** (multi-symbol daily file, or one file per ticker)
 - **Excel** workbook (wide matrix, long history, simple summary)
 - **HTML email reports** (via SMTP)
-- **Live snapshot fetch** from iA’s public API used by [Fund performance and overview](https://ia.ca/funds-performance) (`/api/sites/ia/fund/yield`)
+- **Live data** from iA’s public API used by [Fund performance and overview](https://ia.ca/funds-performance) (`/api/sites/ia/fund/yield`): single-day snapshot, optional merge into a wide file, or **day-by-day history** over a date range compiled into wide/long CSVs.
 
 ## Install
 
@@ -42,9 +42,11 @@ ia-funds excel --input path/to/wide.csv --output out/report.xlsx
 ia-funds email --input path/to/wide.csv --subject "Daily iA funds"
 ```
 
-### Live fetch (append latest NAV column)
+### Live fetch (single day or full history from the API)
 
-The site loads data from `https://ia.ca/api/sites/ia/fund/yield` with query parameters `locale`, `fundType` (`savings` or `insurance`), and `date` (`YYYY-MM-DD`). This returns **one snapshot** (many rows for each fund series), not full history. Typical use: append today’s column to your master wide CSV.
+The site loads data from `https://ia.ca/api/sites/ia/fund/yield` with query parameters `locale`, `fundType` (`savings` or `insurance`), and `date` (`YYYY-MM-DD`).
+
+**Single snapshot** (one day, many funds — same as before):
 
 ```bash
 ia-funds fetch --date 2026-05-22 --output out/snapshot.csv
@@ -53,6 +55,22 @@ ia-funds fetch --date 2026-05-22 --output out/snapshot.csv
 ia-funds fetch --date 2026-05-22 --output out/snapshot.csv \
   --merge-wide path/to/master_wide.csv --merge-out path/to/master_wide_updated.csv
 ```
+
+**Day-by-day history** rebuilds a wide matrix by calling the API once per calendar day between `--from-date` and `--to-date` (inclusive), deduplicating multiple rows per `fundTelusCode`, then pivoting NAVs into columns. This can take a long time and many requests; use `--sleep` (default 0.25s) to limit server load. Empty responses (weekends, holidays, or dates with no data) simply omit that column.
+
+```bash
+ia-funds fetch --from-date 2025-04-01 --to-date 2025-04-30 --output out/history_wide.csv
+
+# Also write long format (one row per fund per day)
+ia-funds fetch --from-date 2025-04-01 --to-date 2025-04-30 \
+  --output out/history_wide.csv --long-output out/history_long.csv
+
+# Only weekdays; abort on first HTTP error
+ia-funds fetch --from-date 2025-01-01 --to-date 2025-06-01 --output out/wide.csv \
+  --weekdays-only --fail-fast --sleep 0.3
+```
+
+Wide output columns use ISO dates (`YYYY-MM-DD`), compatible with `ia-funds metastock` / `load_wide_csv`.
 
 ## MetaStock notes
 
