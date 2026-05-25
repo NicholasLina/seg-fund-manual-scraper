@@ -31,7 +31,7 @@ def fetch_yield_snapshot(
     Download the same snapshot used by https://ia.ca/funds-performance (Savings tab).
 
     This returns one row per product/fund series with net unit value and return columns.
-    For many days at once, use :func:`fetch_yield_history` (day-by-day requests compiled to wide CSV).
+    For many days at once, use ``fetch_yield_history`` (day-by-day requests compiled to wide CSV).
     """
     if isinstance(as_of, str):
         d = pd.to_datetime(as_of).date()
