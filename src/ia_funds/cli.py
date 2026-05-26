@@ -168,7 +168,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     pr = sub.add_parser("email", help="Send HTML summary via SMTP")
     pr.add_argument("--input", required=True)
-    pr.add_argument("--subject", default="iA funds performance report")
+    pr.add_argument(
+        "--subject",
+        default=None,
+        help="Email subject (default: iA Seg Fund Report — <date> in FUND_REPORT_TZ, same as seg-fund-scraper)",
+    )
     pr.add_argument("--mail-from", dest="mail_from", default=None)
     pr.add_argument("--mail-to", dest="mail_to", default=None)
     pr.set_defaults(func=cmd_email)
