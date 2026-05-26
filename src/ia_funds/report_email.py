@@ -7,6 +7,7 @@ import ssl
 from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formatdate
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -66,11 +67,41 @@ def _resolve_mail_from(mail_from: str | None) -> str:
     return (mail_from or os.environ.get("MAIL_FROM") or os.environ.get("SMTP_FROM") or "").strip()
 
 
+def generate_fund_analysis_html(wide: pd.DataFrame, *, data_as_of: str | None = None) -> str:
+    """
+    Return a complete HTML document in the same format as seg-fund-scraper
+    ``fund_email_analysis.write_polished_html`` (masthead, tabs, CSS, sortable ``indicators-table``,
+    chart modal fragment from ``fund_chart_embed``).
+
+    ``wide`` must follow the usual wide NAV layout: ``Funds``, ``Asset class``, ``Code``, then
+    date columns. When ``data_as_of`` is omitted, the latest date column header is used for the
+    masthead (same role as ``data_as_of`` in the upstream writer).
+    """
+    summary = build_summary_table(wide)
+    label = data_as_of if data_as_of is not None else _data_as_of_label(wide)
+    return build_fund_analysis_email_html(summary, data_as_of=label)
+
+
+def write_fund_analysis_html(
+    wide: pd.DataFrame,
+    path: str | Path,
+    *,
+    data_as_of: str | None = None,
+) -> Path:
+    """
+    Write :func:`generate_fund_analysis_html` to ``path`` (UTF-8). Same artifact type as
+    seg-fund-scraper default ``fund_analysis_email.html`` (path often set via ``FUND_ANALYSIS_HTML`` there).
+    """
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(generate_fund_analysis_html(wide, data_as_of=data_as_of), encoding="utf-8")
+    return p
+
+
 def html_email_body(wide: pd.DataFrame, title: str | None = None) -> str:
     """Return the seg-fund-scraper-style HTML body (``title`` is ignored; kept for API compatibility)."""
     _ = title
-    summary = build_summary_table(wide)
-    return build_fund_analysis_email_html(summary, data_as_of=_data_as_of_label(wide))
+    return generate_fund_analysis_html(wide)
 
 
 def send_report_smtp(
@@ -122,8 +153,7 @@ def send_report_smtp(
         "If you do not see formatted tables below, enable HTML email or open the attached .html file."
     )
 
-    summary = build_summary_table(wide)
-    html_text = build_fund_analysis_email_html(summary, data_as_of=_data_as_of_label(wide))
+    html_text = generate_fund_analysis_html(wide)
     html_bytes = html_text.encode("utf-8")
 
     use_ssl = os.environ.get("SMTP_SSL", "").strip().lower() in ("1", "true", "yes", "on") or port == 465

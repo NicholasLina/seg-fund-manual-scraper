@@ -11,7 +11,7 @@ from ia_funds.excel_export import export_workbook
 from ia_funds.loader import load_wide_csv, wide_to_long
 from ia_funds.logutil import configure_logging
 from ia_funds.metastock import export_per_ticker_files, wide_csv_to_metastock
-from ia_funds.report_email import send_report_smtp
+from ia_funds.report_email import send_report_smtp, write_fund_analysis_html
 from ia_funds.scraper import fetch_yield_history, fetch_yield_snapshot, merge_nav_into_wide
 
 log = logging.getLogger(__name__)
@@ -67,6 +67,14 @@ def cmd_excel(args: argparse.Namespace) -> int:
     log.info("excel: input=%s output=%s", args.input, args.output)
     wide, _ = load_wide_csv(args.input)
     p = export_workbook(wide, args.output)
+    print(f"Wrote {p}")
+    return 0
+
+
+def cmd_report_html(args: argparse.Namespace) -> int:
+    log.info("report-html: input=%s output=%s", args.input, args.output)
+    wide, _ = load_wide_csv(args.input)
+    p = write_fund_analysis_html(wide, args.output, data_as_of=args.data_as_of)
     print(f"Wrote {p}")
     return 0
 
@@ -165,6 +173,24 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--input", required=True)
     pe.add_argument("--output", required=True)
     pe.set_defaults(func=cmd_excel)
+
+    prh = sub.add_parser(
+        "report-html",
+        help="Write seg-fund-scraper-style fund analysis HTML (same layout as fund_analysis_email.html)",
+    )
+    prh.add_argument("--input", required=True, help="Wide NAV CSV path")
+    prh.add_argument(
+        "--output",
+        required=True,
+        help="Output .html path (compare to seg-fund FUND_ANALYSIS_HTML / fund_analysis_email.html)",
+    )
+    prh.add_argument(
+        "--data-as-of",
+        dest="data_as_of",
+        default=None,
+        help="Masthead 'Data as of' text (default: latest date column in the wide file)",
+    )
+    prh.set_defaults(func=cmd_report_html)
 
     pr = sub.add_parser("email", help="Send HTML summary via SMTP")
     pr.add_argument("--input", required=True)

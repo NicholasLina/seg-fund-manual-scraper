@@ -4,7 +4,8 @@ Python toolkit inspired by manual segregated-fund workflows (similar in spirit t
 
 - **MetaStock DownLoader–friendly ASCII** (multi-symbol daily file, or one file per ticker)
 - **Excel** workbook (wide matrix, long history, simple summary)
-- **HTML email reports** (via SMTP), using the same **multipart layout and HTML shell** as [seg-fund-scraper](https://github.com/NicholasLina/seg-fund-scraper) (`send_fund_report_smtp.py` + `fund_email_analysis` styling; chart modal JS is vendored from that repo).
+- **HTML fund analysis file** (same document shell as [seg-fund-scraper](https://github.com/NicholasLina/seg-fund-scraper) `fund_email_analysis.write_polished_html` / `fund_analysis_email.html`), via `write_fund_analysis_html` / `ia-funds report-html`
+- **HTML email reports** (via SMTP), using the same **multipart layout and HTML body** as seg-fund-scraper (`send_fund_report_smtp.py`; chart modal JS is vendored from that repo).
 - **Live data** from iA’s public API used by [Fund performance and overview](https://ia.ca/funds-performance) (`/api/sites/ia/fund/yield`): single-day snapshot, optional merge into a wide file, or **day-by-day history** over a date range compiled into wide/long CSVs.
 
 ## Install
@@ -38,8 +39,20 @@ ia-funds metastock --input path/to/wide.csv --output out/per_ticker --split
 # Excel: sheets Wide, Long, Summary
 ia-funds excel --input path/to/wide.csv --output out/report.xlsx
 
+# HTML fund analysis page (same document format as seg-fund-scraper fund_analysis_email.html)
+ia-funds report-html --input path/to/wide.csv --output out/fund_analysis_email.html
+
 # Email (configure SMTP via environment – see below)
-ia-funds email --input path/to/wide.csv --subject "Daily iA funds"
+ia-funds email --input path/to/wide.csv
+```
+
+From Python, the same HTML string or file is:
+
+```python
+from ia_funds import generate_fund_analysis_html, write_fund_analysis_html
+
+text = generate_fund_analysis_html(wide_df)
+write_fund_analysis_html(wide_df, "fund_analysis_email.html")
 ```
 
 ### Live fetch (single day or full history from the API)
