@@ -3,7 +3,8 @@ from __future__ import annotations
 import sys
 import time
 from datetime import date, datetime, timedelta
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Sequence
+
 
 import pandas as pd
 import requests
@@ -26,6 +27,7 @@ def fetch_yield_snapshot(
     locale: str = "en-ca",
     session: requests.Session | None = None,
     timeout: float = 60.0,
+    fund_product_ids: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """
     Download the same snapshot used by https://ia.ca/funds-performance (Savings tab).
@@ -47,6 +49,12 @@ def fetch_yield_snapshot(
     rows: list[dict[str, Any]] = r.json()
     if not rows:
         return pd.DataFrame()
+
+    if fund_product_ids:
+        allow = {str(x).strip().lower() for x in fund_product_ids}
+        rows = [row for row in rows if str(row.get("fundProductId", "")).strip().lower() in allow]
+        if not rows:
+            return pd.DataFrame()
 
     flat: list[dict[str, Any]] = []
     for row in rows:
@@ -143,6 +151,7 @@ def fetch_yield_history(
     weekdays_only: bool = False,
     fail_fast: bool = False,
     progress: Callable[[date, int, int, str], None] | None = None,
+    fund_product_ids: Sequence[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Reconstruct NAV history by calling `/api/sites/ia/fund/yield` once per calendar day in the range.
@@ -174,7 +183,14 @@ def fetch_yield_history(
     for i, d in enumerate(dates, start=1):
         msg = ""
         try:
-            snap = fetch_yield_snapshot(d, fund_type=fund_type, locale=locale, session=sess, timeout=timeout)
+            snap = fetch_yield_snapshot(
+                d,
+                fund_type=fund_type,
+                locale=locale,
+                session=sess,
+                timeout=timeout,
+                fund_product_ids=fund_product_ids,
+            )
             collected.append((d, snap))
             msg = f"{len(snap)} rows" if not snap.empty else "empty"
         except requests.HTTPError as e:

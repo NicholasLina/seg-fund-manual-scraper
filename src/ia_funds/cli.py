@@ -3,11 +3,46 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import pandas as pd
+
+from ia_funds.catalog import fetch_fund_product_catalog, resolve_fund_product_ids
 from ia_funds.excel_export import export_workbook
 from ia_funds.loader import load_wide_csv, wide_to_long
 from ia_funds.metastock import export_per_ticker_files, wide_csv_to_metastock
 from ia_funds.report_email import send_report_smtp
 from ia_funds.scraper import fetch_yield_history, fetch_yield_snapshot, merge_nav_into_wide
+
+
+def _resolved_fund_product_ids(args: argparse.Namespace) -> list[str] | None:
+    """Combine --fund-product-id, --fund-product-name, and --fund-product-contains into UUIDs."""
+    explicit = list(args.fund_product_id or [])
+    names = list(args.fund_product_name or [])
+    contains = args.fund_product_contains
+    if not explicit and not names and not contains:
+        return None
+    if names or contains:
+        catalog = fetch_fund_product_catalog(args.locale)
+    else:
+        catalog = pd.DataFrame(columns=["product_id", "name", "name_raw"])
+    return resolve_fund_product_ids(
+        catalog,
+        exact_names=names or None,
+        contains=contains,
+        explicit_ids=explicit or None,
+    )
+
+
+def cmd_list_products(args: argparse.Namespace) -> int:
+    cat = fetch_fund_product_catalog(args.locale)
+    if args.output:
+        p = Path(args.output)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        cat.to_csv(p, index=False)
+        print(f"Wrote {p} ({len(cat)} products)")
+    else:
+        with pd.option_context("display.max_rows", None, "display.max_colwidth", 100):
+            print(cat[["product_id", "name"]].to_string(index=False))
+    return 0
 
 
 def cmd_metastock(args: argparse.Namespace) -> int:
@@ -40,6 +75,8 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    fund_product_ids = _resolved_fund_product_ids(args)
+
     if args.from_date and args.to_date:
         wide, long_df = fetch_yield_history(
             args.from_date,
@@ -49,6 +86,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             sleep_seconds=args.sleep,
             weekdays_only=args.weekdays_only,
             fail_fast=args.fail_fast,
+            fund_product_ids=fund_product_ids,
         )
         wide.to_csv(out, index=False)
         date_cols = [c for c in wide.columns if c not in ("Funds", "Asset class", "Code")]
@@ -64,7 +102,12 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print("error: both --from-date and --to-date are required for history mode", flush=True)
         return 2
 
-    snap = fetch_yield_snapshot(args.date, fund_type=args.fund_type, locale=args.locale)
+    snap = fetch_yield_snapshot(
+        args.date,
+        fund_type=args.fund_type,
+        locale=args.locale,
+        fund_product_ids=fund_product_ids,
+    )
     snap.to_csv(out, index=False)
     print(f"Wrote {out} ({len(snap)} rows)")
     if args.merge_wide:
@@ -138,9 +181,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Only request Mon–Fri (still one call per weekday)",
     )
     pf.add_argument("--fail-fast", action="store_true", help="Abort on first HTTP/network error")
+    pf.add_argument(
+        "--fund-product-id",
+        action="append",
+        default=None,
+        metavar="UUID",
+        help="Only include rows whose fundProductId matches (repeat for multiple products)",
+    )
+    pf.add_argument(
+        "--fund-product-name",
+        action="append",
+        default=None,
+        metavar="NAME",
+        help='Exact product name from the savings page (e.g. "Series 75/100 Prestige 500"); run list-products',
+    )
+    pf.add_argument(
+        "--fund-product-contains",
+        default=None,
+        metavar="SUBSTRING",
+        help="Case-insensitive substring that must match exactly one product name (otherwise error)",
+    )
     pf.add_argument("--merge-wide", dest="merge_wide", default=None, help="(single-day mode) wide CSV to merge into")
     pf.add_argument("--merge-out", dest="merge_out", default=None, help="(single-day mode) merged wide output path")
     pf.set_defaults(func=cmd_fetch)
+
+    pl = sub.add_parser("list-products", help="List savings fund product names and IDs from ia.ca (for fetch filters)")
+    pl.add_argument("--locale", default="en-ca")
+    pl.add_argument("--output", default=None, help="Write CSV to this path instead of printing a table")
+    pl.set_defaults(func=cmd_list_products)
 
     return p
 
