@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
 from datetime import datetime
 from io import StringIO
 
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 
 def _clean_fund_name(name: str) -> str:
@@ -22,6 +25,7 @@ def load_wide_csv(path: str) -> tuple[pd.DataFrame, list[pd.Timestamp]]:
 
     Returns (wide_frame, sorted_date_columns as timestamps).
     """
+    log.info("Loading wide CSV: %s", path)
     df = pd.read_csv(path, dtype=str, keep_default_na=False)
     if df.shape[1] < 4:
         raise ValueError("Expected at least columns: Funds, Asset class, Code, plus one or more date columns.")
@@ -56,6 +60,7 @@ def load_wide_csv(path: str) -> tuple[pd.DataFrame, list[pd.Timestamp]]:
         wide[c] = pd.to_numeric(wide[c].replace("", pd.NA), errors="coerce")
 
     dts = sorted(pd.to_datetime(new_date_cols, errors="coerce").tolist())
+    log.info("Loaded %d funds, %d date columns", len(wide), len(new_date_cols))
     return wide, dts
 
 
@@ -67,7 +72,9 @@ def wide_to_long(wide: pd.DataFrame) -> pd.DataFrame:
     long["date"] = pd.to_datetime(long["date"], errors="coerce")
     long = long.dropna(subset=["date", "nav"])
     long = long.sort_values(["Code", "date"])
-    return long.reset_index(drop=True)
+    out = long.reset_index(drop=True)
+    log.debug("wide_to_long: %d NAV observations", len(out))
+    return out
 
 
 def append_column_from_series(wide: pd.DataFrame, series: pd.Series, column_date: datetime | pd.Timestamp) -> pd.DataFrame:
@@ -82,4 +89,6 @@ def append_column_from_series(wide: pd.DataFrame, series: pd.Series, column_date
     # Reorder: meta + sorted date columns
     meta = ["Funds", "Asset class", "Code"]
     dates = sorted([c for c in out.columns if c not in meta])
-    return out[meta + dates]
+    result = out[meta + dates]
+    log.debug("append_column_from_series: added column %s (%d codes in wide)", col, len(wide))
+    return result

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import codecs
 import html as html_lib
+import logging
 import re
 
 import pandas as pd
 import requests
+
+log = logging.getLogger(__name__)
 
 
 def _funds_performance_url(locale: str) -> str:
@@ -39,9 +42,12 @@ def fetch_fund_product_catalog(
     """
     url = _funds_performance_url(locale)
     sess = session or requests.Session()
+    log.info("Downloading fund product catalog: %s", url)
     r = sess.get(url, headers={"User-Agent": "ia-funds-metastock/0.1"}, timeout=timeout)
     r.raise_for_status()
-    return parse_product_catalog_html(r.text)
+    df = parse_product_catalog_html(r.text)
+    log.info("Product catalog: %d products", len(df))
+    return df
 
 
 def parse_product_catalog_html(page_html: str) -> pd.DataFrame:
@@ -53,9 +59,12 @@ def parse_product_catalog_html(page_html: str) -> pd.DataFrame:
         name = _decode_embedded_name(raw_name)
         rows.append({"product_id": product_id, "name": name, "name_raw": raw_name})
     if not rows:
+        log.debug("parse_product_catalog_html: no product id/name matches in HTML")
         return pd.DataFrame(columns=["product_id", "name", "name_raw"])
     df = pd.DataFrame(rows).drop_duplicates(subset=["product_id"])
-    return df.sort_values("name").reset_index(drop=True)
+    out = df.sort_values("name").reset_index(drop=True)
+    log.debug("parse_product_catalog_html: %d unique products from regex", len(out))
+    return out
 
 
 def resolve_fund_product_ids(
@@ -103,4 +112,5 @@ def resolve_fund_product_ids(
         if i not in seen:
             seen.add(i)
             out.append(i)
+    log.debug("resolve_fund_product_ids: resolved to %d unique id(s)", len(out))
     return out

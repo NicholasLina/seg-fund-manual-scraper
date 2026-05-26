@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 import pandas as pd
 
 from ia_funds.loader import wide_to_long
+
+log = logging.getLogger(__name__)
 
 
 def sanitize_ticker(code: str) -> str:
@@ -26,6 +29,7 @@ def export_metastock_ascii(long: pd.DataFrame, dest: str | Path) -> Path:
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
 
+    log.debug("Writing MetaStock ASCII: %s (%d rows)", dest, len(long))
     df = long.copy()
     df = df.rename(columns={"Funds": "name", "Code": "code", "date": "dt", "nav": "close"})
     df["ticker"] = df["code"].map(sanitize_ticker)
@@ -48,6 +52,7 @@ def export_metastock_ascii(long: pd.DataFrame, dest: str | Path) -> Path:
 
     text = "\n".join(lines) + "\n"
     dest.write_text(text, encoding="utf-8")
+    log.debug("export_metastock_ascii: wrote %d data lines", len(lines) - 1)
     return dest
 
 
@@ -55,15 +60,20 @@ def export_per_ticker_files(long: pd.DataFrame, out_dir: str | Path) -> list[Pat
     """Write one ASCII file per Code (basename = ticker)."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    groups = list(long.groupby("Code"))
+    log.info("Writing MetaStock per-ticker files under %s (%d tickers)", out_dir, len(groups))
     written: list[Path] = []
     for code, g in long.groupby("Code"):
         tick = sanitize_ticker(code)
         path = out_dir / f"{tick}.csv"
         export_metastock_ascii(g, path)
         written.append(path)
+    log.info("Wrote %d MetaStock ASCII files", len(written))
     return written
 
 
 def wide_csv_to_metastock(wide: pd.DataFrame, dest: str | Path) -> Path:
+    log.debug("wide_csv_to_metastock: melting wide frame (%d rows)", len(wide))
     long = wide_to_long(wide)
+    log.info("Writing combined MetaStock ASCII: %s (%d NAV rows)", dest, len(long))
     return export_metastock_ascii(long, dest)

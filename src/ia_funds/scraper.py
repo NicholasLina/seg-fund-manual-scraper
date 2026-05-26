@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import sys
+import logging
 import time
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Literal, Sequence
-
 
 import pandas as pd
 import requests
@@ -12,6 +11,8 @@ import requests
 from ia_funds.loader import _clean_fund_name, append_column_from_series
 
 IA_YIELD_URL = "https://ia.ca/api/sites/ia/fund/yield"
+
+log = logging.getLogger(__name__)
 
 
 def _unwrap(cell: Any) -> Any:
@@ -44,15 +45,24 @@ def fetch_yield_snapshot(
 
     params = {"locale": locale, "fundType": fund_type, "date": d.isoformat()}
     sess = session or requests.Session()
+    log.debug("GET %s params=%s", IA_YIELD_URL, params)
     r = sess.get(IA_YIELD_URL, params=params, headers={"User-Agent": "ia-funds-metastock/0.1"}, timeout=timeout)
     r.raise_for_status()
     rows: list[dict[str, Any]] = r.json()
     if not rows:
+        log.debug("Yield snapshot %s: API returned no rows", d.isoformat())
         return pd.DataFrame()
 
     if fund_product_ids:
         allow = {str(x).strip().lower() for x in fund_product_ids}
+        n_before = len(rows)
         rows = [row for row in rows if str(row.get("fundProductId", "")).strip().lower() in allow]
+        log.debug(
+            "Yield snapshot %s: filtered %d -> %d rows by fund_product_ids",
+            d.isoformat(),
+            n_before,
+            len(rows),
+        )
         if not rows:
             return pd.DataFrame()
 
@@ -75,7 +85,9 @@ def fetch_yield_snapshot(
                 "netReturns10Years": _unwrap(row.get("netReturns10Years")),
             }
         )
-    return pd.DataFrame.from_records(flat)
+    out = pd.DataFrame.from_records(flat)
+    log.debug("Yield snapshot %s: %d rows after flatten", d.isoformat(), len(out))
+    return out
 
 
 def dedupe_snapshot_by_code(snapshot: pd.DataFrame) -> pd.DataFrame:
@@ -85,12 +97,15 @@ def dedupe_snapshot_by_code(snapshot: pd.DataFrame) -> pd.DataFrame:
     Rows are sorted by `fundCode` for stable ordering, then the first row per code is kept.
     """
     if snapshot.empty:
+        log.debug("dedupe_snapshot_by_code: empty input")
         return snapshot
     df = snapshot.copy()
     df = df.dropna(subset=["fundTelusCode", "netUnitValue"])
     if "fundCode" in df.columns:
         df = df.sort_values(["fundTelusCode", "fundCode"], na_position="last")
-    return df.drop_duplicates(subset=["fundTelusCode"], keep="first").reset_index(drop=True)
+    out = df.drop_duplicates(subset=["fundTelusCode"], keep="first").reset_index(drop=True)
+    log.debug("dedupe_snapshot_by_code: %d -> %d rows", len(snapshot), len(out))
+    return out
 
 
 def snapshots_to_long(frames: list[tuple[date, pd.DataFrame]]) -> pd.DataFrame:
@@ -105,8 +120,11 @@ def snapshots_to_long(frames: list[tuple[date, pd.DataFrame]]) -> pd.DataFrame:
         chunk = s.assign(date=pd.Timestamp(d))
         pieces.append(chunk)
     if not pieces:
+        log.debug("snapshots_to_long: no non-empty days")
         return pd.DataFrame()
-    return pd.concat(pieces, ignore_index=True)
+    long_df = pd.concat(pieces, ignore_index=True)
+    log.debug("snapshots_to_long: %d rows from %d day frames", len(long_df), len(frames))
+    return long_df
 
 
 def long_nav_to_wide(long_df: pd.DataFrame) -> pd.DataFrame:
@@ -117,6 +135,7 @@ def long_nav_to_wide(long_df: pd.DataFrame) -> pd.DataFrame:
     duplicate rows. The fund title is the first non-null name in chronological order per code.
     """
     if long_df.empty:
+        log.debug("long_nav_to_wide: empty long frame")
         return pd.DataFrame(columns=["Funds", "Asset class", "Code"])
 
     df = long_df.copy()
@@ -136,7 +155,13 @@ def long_nav_to_wide(long_df: pd.DataFrame) -> pd.DataFrame:
     wide.insert(0, "Funds", wide["Code"].map(first_name))
     wide.insert(1, "Asset class", "")
     cols = ["Funds", "Asset class", "Code"] + [c for c in wide.columns if c not in ("Funds", "Asset class", "Code")]
-    return wide[cols]
+    wide_out = wide[cols]
+    log.debug(
+        "long_nav_to_wide: %d codes, %d date columns",
+        len(wide_out),
+        len([c for c in wide_out.columns if c not in ("Funds", "Asset class", "Code")]),
+    )
+    return wide_out
 
 
 def fetch_yield_history(
@@ -179,9 +204,20 @@ def fetch_yield_history(
     sess = session or requests.Session()
     collected: list[tuple[date, pd.DataFrame]] = []
     total = len(dates)
+    filt = f", product filter ({len(fund_product_ids)} ids)" if fund_product_ids else ""
+    log.info(
+        "fetch_yield_history: %s .. %s (%d days to request%s, sleep=%ss, weekdays_only=%s)",
+        d0.isoformat(),
+        d1.isoformat(),
+        total,
+        filt,
+        sleep_seconds,
+        weekdays_only,
+    )
 
     for i, d in enumerate(dates, start=1):
         msg = ""
+        request_failed = False
         try:
             snap = fetch_yield_snapshot(
                 d,
@@ -195,35 +231,54 @@ def fetch_yield_history(
             msg = f"{len(snap)} rows" if not snap.empty else "empty"
         except requests.HTTPError as e:
             msg = f"HTTP {e.response.status_code if e.response is not None else '?'}"
+            log.warning("[%d/%d] %s %s", i, total, d.isoformat(), msg)
+            request_failed = True
             if fail_fast:
                 raise
             collected.append((d, pd.DataFrame()))
         except requests.RequestException as e:
             msg = str(e)[:120]
+            log.warning("[%d/%d] %s %s", i, total, d.isoformat(), msg)
+            request_failed = True
             if fail_fast:
                 raise
             collected.append((d, pd.DataFrame()))
 
         if progress is not None:
             progress(d, i, total, msg)
-        elif msg != "empty":
-            print(f"[{i}/{total}] {d.isoformat()} {msg}", file=sys.stderr, flush=True)
+        if not request_failed:
+            if msg == "empty":
+                log.debug("[%d/%d] %s empty", i, total, d.isoformat())
+            else:
+                log.info("[%d/%d] %s %s", i, total, d.isoformat(), msg)
 
         if sleep_seconds > 0 and i < total:
             time.sleep(sleep_seconds)
 
     long_df = snapshots_to_long(collected)
     if long_df.empty:
+        log.info("fetch_yield_history: no NAV rows after combining days; returning empty wide/long")
         wide = pd.DataFrame(columns=["Funds", "Asset class", "Code"])
         return wide, long_df
     wide = long_nav_to_wide(long_df)
+    date_cols = [c for c in wide.columns if c not in ("Funds", "Asset class", "Code")]
+    log.info(
+        "fetch_yield_history: done — wide %d funds × %d dates; long %d rows",
+        len(wide),
+        len(date_cols),
+        len(long_df),
+    )
     return wide, long_df
 
 
 def merge_nav_into_wide(wide: pd.DataFrame, snapshot: pd.DataFrame, as_of: date | datetime | str) -> pd.DataFrame:
     """Append netUnitValue from snapshot keyed by Code == fundTelusCode."""
     if snapshot.empty:
+        log.debug("merge_nav_into_wide: empty snapshot, wide unchanged (%d rows)", len(wide))
         return wide
     s = dedupe_snapshot_by_code(snapshot)
     series = s.set_index("fundTelusCode")["netUnitValue"]
-    return append_column_from_series(wide, series, as_of)
+    out = append_column_from_series(wide, series, as_of)
+    col = pd.to_datetime(as_of).strftime("%Y-%m-%d")
+    log.info("merge_nav_into_wide: appended column %s from %d snapshot codes", col, len(series))
+    return out
