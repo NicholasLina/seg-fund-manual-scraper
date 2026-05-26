@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -8,9 +9,12 @@ import pandas as pd
 from ia_funds.catalog import fetch_fund_product_catalog, resolve_fund_product_ids
 from ia_funds.excel_export import export_workbook
 from ia_funds.loader import load_wide_csv, wide_to_long
+from ia_funds.logutil import configure_logging
 from ia_funds.metastock import export_per_ticker_files, wide_csv_to_metastock
 from ia_funds.report_email import send_report_smtp
 from ia_funds.scraper import fetch_yield_history, fetch_yield_snapshot, merge_nav_into_wide
+
+log = logging.getLogger(__name__)
 
 
 def _resolved_fund_product_ids(args: argparse.Namespace) -> list[str] | None:
@@ -33,6 +37,7 @@ def _resolved_fund_product_ids(args: argparse.Namespace) -> list[str] | None:
 
 
 def cmd_list_products(args: argparse.Namespace) -> int:
+    log.info("list-products: locale=%s", args.locale)
     cat = fetch_fund_product_catalog(args.locale)
     if args.output:
         p = Path(args.output)
@@ -46,6 +51,7 @@ def cmd_list_products(args: argparse.Namespace) -> int:
 
 
 def cmd_metastock(args: argparse.Namespace) -> int:
+    log.info("metastock: input=%s output=%s split=%s", args.input, args.output, args.split)
     wide, _ = load_wide_csv(args.input)
     out = Path(args.output)
     if args.split:
@@ -58,6 +64,7 @@ def cmd_metastock(args: argparse.Namespace) -> int:
 
 
 def cmd_excel(args: argparse.Namespace) -> int:
+    log.info("excel: input=%s output=%s", args.input, args.output)
     wide, _ = load_wide_csv(args.input)
     p = export_workbook(wide, args.output)
     print(f"Wrote {p}")
@@ -65,6 +72,7 @@ def cmd_excel(args: argparse.Namespace) -> int:
 
 
 def cmd_email(args: argparse.Namespace) -> int:
+    log.info("email: input=%s subject=%r", args.input, args.subject)
     wide, _ = load_wide_csv(args.input)
     send_report_smtp(wide, args.subject, mail_from=args.mail_from, mail_to=args.mail_to)
     print("Sent.")
@@ -76,8 +84,16 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
 
     fund_product_ids = _resolved_fund_product_ids(args)
+    if fund_product_ids:
+        log.info("fetch: limiting to %d fund product id(s)", len(fund_product_ids))
 
     if args.from_date and args.to_date:
+        log.info(
+            "fetch: history mode %s .. %s -> %s",
+            args.from_date,
+            args.to_date,
+            out,
+        )
         wide, long_df = fetch_yield_history(
             args.from_date,
             args.to_date,
@@ -96,12 +112,14 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             lp.parent.mkdir(parents=True, exist_ok=True)
             long_df.to_csv(lp, index=False)
             print(f"Wrote long format: {lp} ({len(long_df)} rows)")
+        log.info("fetch: history finished")
         return 0
 
     if args.from_date or args.to_date:
         print("error: both --from-date and --to-date are required for history mode", flush=True)
         return 2
 
+    log.info("fetch: snapshot mode date=%s -> %s", args.date, out)
     snap = fetch_yield_snapshot(
         args.date,
         fund_type=args.fund_type,
@@ -122,6 +140,19 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ia-funds", description="iA funds → MetaStock / Excel / email / live fetch")
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase logging (-v repeats for more detail; -vv enables debug)",
+    )
+    p.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Less logging from ia_funds (warnings and errors only)",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pm = sub.add_parser("metastock", help="Export MetaStock-compatible ASCII CSV")
@@ -216,6 +247,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
+    configure_logging(verbose=args.verbose, quiet=args.quiet)
     if args.cmd == "fetch" and not args.from_date and not args.to_date and not args.date:
         parser.error("fetch requires either --date (single day) or both --from-date and --to-date (history)")
     raise SystemExit(args.func(args))

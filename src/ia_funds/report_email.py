@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -9,6 +10,8 @@ from email.utils import formatdate
 import pandas as pd
 
 from ia_funds.loader import wide_to_long
+
+log = logging.getLogger(__name__)
 
 
 def build_summary_table(wide: pd.DataFrame) -> pd.DataFrame:
@@ -72,7 +75,7 @@ def send_report_smtp(
 
     use_tls = os.environ.get("SMTP_TLS", "1") not in ("0", "false", "False")
 
-    msg = MIMEMultipart("alternative")
+    log.info("Sending report email via SMTP %s:%s (TLS=%s)", host, port, use_tls)
     msg["Subject"] = subject
     msg["From"] = mail_from
     msg["To"] = mail_to
@@ -86,3 +89,4 @@ def send_report_smtp(
         if user and password:
             smtp.login(user, password)
         smtp.sendmail(mail_from, [mail_to], msg.as_string())
+    log.info("Email sent to %s", mail_to)

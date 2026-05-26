@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -7,6 +8,8 @@ from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 from ia_funds.loader import wide_to_long
+
+log = logging.getLogger(__name__)
 
 
 def export_workbook(wide: pd.DataFrame, dest: str | Path) -> Path:
@@ -18,6 +21,7 @@ def export_workbook(wide: pd.DataFrame, dest: str | Path) -> Path:
     """
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
+    log.info("Building Excel workbook: %s", dest)
     long = wide_to_long(wide)
 
     wb = Workbook()
@@ -50,4 +54,5 @@ def export_workbook(wide: pd.DataFrame, dest: str | Path) -> Path:
         ws2.append(row)
 
     wb.save(dest)
+    log.info("Saved Excel workbook (%d wide rows, %d long rows)", len(wide), len(long))
     return dest

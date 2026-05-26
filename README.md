@@ -71,6 +71,7 @@ Other filters:
 
 You can combine `--fund-product-id` with `--fund-product-name` to merge multiple products into one download.
 
+```bash
 # Merge net unit value into an existing wide NAV file (matches on Code ↔ fundTelusCode)
 ia-funds fetch --date 2026-05-22 --output out/snapshot.csv \
   --merge-wide path/to/master_wide.csv --merge-out path/to/master_wide_updated.csv
@@ -91,6 +92,20 @@ ia-funds fetch --from-date 2025-01-01 --to-date 2025-06-01 --output out/wide.csv
 ```
 
 Wide output columns use ISO dates (`YYYY-MM-DD`), compatible with `ia-funds metastock` / `load_wide_csv`.
+
+### Logging
+
+Progress goes to **stderr** via Python’s `logging` module. By default you see **INFO** lines from `ia_funds` (especially per-day lines during `fetch` history runs).
+
+```bash
+# Quieter (warnings/errors only from this package)
+ia-funds -q fetch --from-date 2025-04-01 --to-date 2025-04-05 --output out/wide.csv
+
+# More detail (repeat for debug: -vv)
+ia-funds -v fetch --date 2026-05-22 --output snap.csv
+```
+
+When using the Python API without the CLI, call `ia_funds.logutil.configure_logging()` once (or `logging.basicConfig`) so INFO messages are visible.
 
 ## MetaStock notes
 
