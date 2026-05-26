@@ -4,6 +4,9 @@ Layout, CSS, tabs, sortable tables, footer, and chart modal fragment are aligned
 https://github.com/NicholasLina/seg-fund-scraper — wide NAV rows populate the weekly and
 monthly indicator panels (identical table); the Filter tab shows an empty state like an
 empty top-picks run in the upstream tool.
+
+For a **wide** ``DataFrame``, use the public helpers :func:`ia_funds.report_email.generate_fund_analysis_html`
+or :func:`ia_funds.report_email.write_fund_analysis_html` (same HTML as ``build_fund_analysis_email_html`` here).
 """
 
 from __future__ import annotations
