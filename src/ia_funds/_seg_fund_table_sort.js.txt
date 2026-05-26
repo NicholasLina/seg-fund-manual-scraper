@@ -1,0 +1,63 @@
+<script>
+(function () {
+  function parseCell(td) {
+    if (!td) return { t: "str", v: "" };
+    var cls = td.getAttribute("class") || "";
+    var isNum = cls.indexOf("num") >= 0;
+    var raw = (td.textContent || "").trim();
+    if (raw === "\\u2014" || raw === "-" || raw === "") {
+      return { t: isNum ? "num" : "str", v: isNum ? NaN : "" };
+    }
+    if (isNum) {
+      var s = raw.replace(/,/g, "").replace(/^\\s*\\$/, "").replace(/%\\s*$/, "").trim();
+      var x = parseFloat(s);
+      return { t: "num", v: isNaN(x) ? NaN : x };
+    }
+    return { t: "str", v: raw.toLowerCase() };
+  }
+  function cmp(a, b, dir) {
+    var v = 0;
+    if (a.t === "num" && b.t === "num") {
+      if (isNaN(a.v) && isNaN(b.v)) v = 0;
+      else if (isNaN(a.v)) v = 1;
+      else if (isNaN(b.v)) v = -1;
+      else v = a.v - b.v;
+    } else {
+      v = String(a.v).localeCompare(String(b.v), undefined, { numeric: true, sensitivity: "base" });
+    }
+    return dir * v;
+  }
+  function wire(table) {
+    if (!table || !table.tBodies.length) return;
+    var thr = table.tHead && table.tHead.rows[0];
+    if (!thr) return;
+    var ths = thr.cells;
+    var tbody = table.tBodies[0];
+    if (!ths.length || !tbody) return;
+    var colDir = {};
+    for (var i = 0; i < ths.length; i++) {
+      (function (colIndex) {
+        var th = ths[colIndex];
+        if (th.classList.contains("no-sort")) return;
+        th.setAttribute("title", "Sort by this column");
+        th.addEventListener("click", function () {
+          var dir = colDir[colIndex] === 1 ? -1 : 1;
+          colDir[colIndex] = dir;
+          var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+          rows.sort(function (r1, r2) {
+            var c1 = r1.cells[colIndex];
+            var c2 = r2.cells[colIndex];
+            return cmp(parseCell(c1), parseCell(c2), dir);
+          });
+          rows.forEach(function (r) { tbody.appendChild(r); });
+          for (var j = 0; j < ths.length; j++) {
+            ths[j].removeAttribute("data-sort");
+          }
+          th.setAttribute("data-sort", dir === 1 ? "asc" : "desc");
+        });
+      })(i);
+    }
+  }
+  document.querySelectorAll("table.indicators-table, table.top-picks-table").forEach(wire);
+})();
+</script>

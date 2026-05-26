@@ -1,0 +1,266 @@
+  <style>
+    :root {
+      --bg: #ebeef3;
+      --card: #ffffff;
+      --text: #1c2333;
+      --muted: #5c6b7e;
+      --border: #d8dee9;
+      --header: linear-gradient(135deg, #1a3a5c 0%, #2c5282 55%, #2b6cb0 100%);
+      --thead: #0f2942;
+      --stripe: #f4f7fb;
+      --hover: #e8f1fc;
+      --accent: #2b6cb0;
+      --radius: 14px;
+      --shadow: 0 4px 24px rgba(15, 41, 66, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px 16px 48px;
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .page {
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+      overflow-x: auto;
+    }
+    .mast {
+      margin-bottom: 28px;
+      padding: 22px 26px;
+      border-radius: var(--radius);
+      background: var(--header);
+      color: #f0f6ff;
+      box-shadow: var(--shadow);
+    }
+    .mast h1 {
+      margin: 0 0 10px;
+      font-size: 1.45rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .meta {
+      margin: 0;
+      font-size: 0.88rem;
+      opacity: 0.9;
+      font-variant-numeric: tabular-nums;
+    }
+    section.card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 28px;
+      overflow: hidden;
+      border: 1px solid rgba(15, 41, 66, 0.06);
+    }
+    .tab-card {
+      position: relative;
+    }
+    .tab-input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+      margin: 0;
+      pointer-events: none;
+    }
+    .tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      padding: 8px 8px 0;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #fafbfd 0%, #fff 100%);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .tab-bar .tab {
+      cursor: pointer;
+      display: inline-block;
+      padding: 12px 20px;
+      margin: 0 4px -1px 0;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: var(--muted);
+      border: 1px solid transparent;
+      border-bottom: none;
+      border-radius: 10px 10px 0 0;
+      background: transparent;
+      user-select: none;
+    }
+    .tab-bar .tab:hover {
+      color: var(--text);
+      background: rgba(43, 108, 176, 0.06);
+    }
+    #view-top:checked ~ .tab-bar label[for="view-top"],
+    #view-weekly:checked ~ .tab-bar label[for="view-weekly"],
+    #view-monthly:checked ~ .tab-bar label[for="view-monthly"] {
+      color: var(--text);
+      background: var(--card);
+      border-color: var(--border);
+      border-bottom-color: var(--card);
+      position: relative;
+      z-index: 2;
+      box-shadow: 0 -2px 8px rgba(15, 41, 66, 0.04);
+    }
+    .tab-panel {
+      display: none;
+      margin: 0;
+      padding: 0;
+    }
+    #view-top:checked ~ .tab-panel.panel-top {
+      display: block;
+    }
+    #view-weekly:checked ~ .tab-panel.panel-w {
+      display: block;
+    }
+    #view-monthly:checked ~ .tab-panel.panel-m {
+      display: block;
+    }
+    .table-wrap {
+      overflow-x: auto;
+      overflow-y: visible;
+      width: 100%;
+      max-width: 100%;
+      -webkit-overflow-scrolling: touch;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 720px;
+    }
+    table.indicators-table {
+      min-width: 1240px;
+    }
+    thead th {
+      text-align: left;
+      padding: 11px 14px;
+      background: var(--thead);
+      color: #e8eef6;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      border-bottom: 2px solid #0a1a2e;
+    }
+    thead th:first-child { border-radius: 0; }
+    tbody td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tbody tr:nth-child(even) td { background: var(--stripe); }
+    tbody tr:hover td { background: var(--hover); }
+    td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-family: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      font-size: 12.5px;
+    }
+    td:first-child {
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    p.empty {
+      margin: 0;
+      padding: 20px 22px;
+      color: var(--muted);
+      font-style: italic;
+    }
+    .top-picks-toolbar {
+      padding: 12px 16px 4px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+    }
+    .top-picks-toolbar-title {
+      margin: 0 0 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .top-picks-toggles {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 18px;
+      font-size: 0.9rem;
+    }
+    .top-picks-toggles label.tp-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .top-picks-toggles input {
+      margin: 0;
+      accent-color: var(--accent);
+    }
+    .top-picks-rsi-zone {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+      padding-left: 10px;
+      border-left: 2px solid #cbd5e1;
+      margin-left: 2px;
+    }
+    .top-picks-va-zone {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+      padding-left: 10px;
+      border-left: 2px solid #cbd5e1;
+      margin-left: 2px;
+    }
+    .top-picks-rsi-zone .tp-toggle-label,
+    .top-picks-va-zone .tp-toggle-label {
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin: 0 4px 0 0;
+    }
+    .top-picks-meta {
+      margin: 10px 0 6px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    thead th.sortable {
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    thead th.sortable:hover {
+      color: #60a5fa;
+    }
+    thead th[data-sort="asc"]::after {
+      content: " \\25B2";
+      font-size: 0.65em;
+      opacity: 0.9;
+    }
+    thead th[data-sort="desc"]::after {
+      content: " \\25BC";
+      font-size: 0.65em;
+      opacity: 0.9;
+    }
+    thead th.no-sort {
+      cursor: default;
+    }
+    footer {
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+  </style>
