@@ -51,6 +51,26 @@ The site loads data from `https://ia.ca/api/sites/ia/fund/yield` with query para
 ```bash
 ia-funds fetch --date 2026-05-22 --output out/snapshot.csv
 
+# Only funds under **Series 75/100 Prestige 500** (matches `fundProductId` from the site catalog)
+ia-funds fetch --date 2026-05-22 --output out/prestige500.csv \
+  --fund-product-name "Series 75/100 Prestige 500"
+
+# Same filter for a full day-by-day history rebuild
+ia-funds fetch --from-date 2025-04-01 --to-date 2025-04-30 --output out/history_wide.csv \
+  --fund-product-name "Series 75/100 Prestige 500"
+
+# List product names and UUIDs (copy/paste for --fund-product-id)
+ia-funds list-products
+ia-funds list-products --output products.csv
+```
+
+Other filters:
+
+- `--fund-product-id <uuid>` (repeatable) — use raw UUID(s) without scraping names.
+- `--fund-product-contains <substring>` — must match **exactly one** product name (case-insensitive); if several match, the command errors and prints candidates.
+
+You can combine `--fund-product-id` with `--fund-product-name` to merge multiple products into one download.
+
 # Merge net unit value into an existing wide NAV file (matches on Code ↔ fundTelusCode)
 ia-funds fetch --date 2026-05-22 --output out/snapshot.csv \
   --merge-wide path/to/master_wide.csv --merge-out path/to/master_wide_updated.csv
